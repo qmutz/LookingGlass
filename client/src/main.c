@@ -77,6 +77,7 @@ struct AppState state;
 struct AppParams params = { 0 };
 
 static void handleMouseMoveEvent(int ex, int ey);
+static void handleMouseMoveEventRelative(int rx, int ry);
 static void alignMouseWithGuest();
 static void alignMouseWithHost();
 
@@ -781,9 +782,14 @@ static void warpMouse(int x, int y)
   SDL_WarpMouseInWindow(state.window, x, y);
 }
 
+static void handleMouseMoveEventRelative(int rx, int ry)
+{
+  if (!spice_mouse_motion(rx, ry))
+    DEBUG_ERROR("failed to send mouse motion message");
+}
+
 static void handleMouseMoveEvent(int ex, int ey)
 {
-
   state.curLocalX    = ex;
   state.curLocalY    = ey;
   state.haveCurLocal = true;
@@ -982,7 +988,8 @@ int eventFilter(void * userdata, SDL_Event * event)
             break;
 
           case MotionNotify:
-            handleMouseMoveEvent(xe.xmotion.x, xe.xmotion.y);
+            if (!state.serverMode)
+              handleMouseMoveEvent(xe.xmotion.x, xe.xmotion.y);
             break;
 
           case EnterNotify:
@@ -1007,6 +1014,8 @@ int eventFilter(void * userdata, SDL_Event * event)
     }
 
     case SDL_MOUSEMOTION:
+      if (state.serverMode)
+        handleMouseMoveEventRelative(event->motion.xrel, event->motion.yrel);
       if (state.wminfo.subsystem != SDL_SYSWM_X11)
         handleMouseMoveEvent(event->motion.x, event->motion.y);
       break;
@@ -1058,6 +1067,7 @@ int eventFilter(void * userdata, SDL_Event * event)
           {
             state.serverMode = !state.serverMode;
             SDL_SetWindowGrab(state.window, state.serverMode);
+            SDL_SetRelativeMouseMode(state.serverMode);
             DEBUG_INFO("Server Mode: %s", state.serverMode ? "on" : "off");
 
             app_alert(
